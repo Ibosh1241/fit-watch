@@ -126,22 +126,18 @@ fun App(ctx: Context) {
     LaunchedEffect(Unit) { if (!hasHrPerm) hrLauncher.launch(Manifest.permission.BODY_SENSORS) }
     val measuring = screen == "warm" || screen == "work"
     DisposableEffect(measuring, hasHrPerm) {
-        var sm: SensorManager? = null
-        var listener: SensorEventListener? = null
-        if (measuring && hasHrPerm) {
-            sm = ctx.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-            val sensor = sm.getDefaultSensor(Sensor.TYPE_HEART_RATE)
-            if (sensor != null) {
-                listener = object : SensorEventListener {
-                    override fun onSensorChanged(e: SensorEvent) {
-                        if (e.values.isNotEmpty()) { val v = e.values[0].toInt(); if (v > 0) hr = v }
-                    }
-                    override fun onAccuracyChanged(s: Sensor?, a: Int) {}
-                }
-                sm.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
+        val sm = if (measuring && hasHrPerm) ctx.getSystemService(Context.SENSOR_SERVICE) as SensorManager else null
+        val sensor = sm?.getDefaultSensor(Sensor.TYPE_HEART_RATE)
+        val listener = if (sensor != null) object : SensorEventListener {
+            override fun onSensorChanged(e: SensorEvent) {
+                if (e.values.isNotEmpty()) { val v = e.values[0].toInt(); if (v > 0) hr = v }
             }
+            override fun onAccuracyChanged(s: Sensor?, a: Int) {}
+        } else null
+        if (sm != null && sensor != null && listener != null) {
+            sm.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
         }
-        onDispose { val s = sm; val l = listener; if (s != null && l != null) s.unregisterListener(l) }
+        onDispose { if (sm != null && listener != null) sm.unregisterListener(listener) }
     }
     val hrText = if (hasHrPerm) "❤️ " + (if (hr > 0) "$hr" else "—") else ""
 
