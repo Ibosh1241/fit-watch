@@ -201,7 +201,10 @@ function load(){try{const r=JSON.parse(localStorage.getItem(KEY));if(r&&r.plan)r
   // migrate v1
   try{const o=JSON.parse(localStorage.getItem("fitcoach_v1"));if(o&&o.profile){const s=freshState();s.profile=o.profile;s.history=o.history||[];s.weightLog=o.weightLog||[];s.nutrition=o.nutrition||{};s.plan.startDate=todayKey();return s;}}catch(e){}
   return freshState();}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
+  try{if(window.AndroidSync&&window.AndroidSync.push)window.AndroidSync.push((S.plan&&S.plan.sessionsDone)||0);}catch(e){}}
+// приём прогресса с часов (Bluetooth Data Layer, вызывается нативным мостом)
+window.__fitOnSync=function(sd){try{sd=+sd||0;if(S.plan&&sd>(S.plan.sessionsDone||0)){S.plan.sessionsDone=sd;save();if(typeof render==="function")render();toast("⌚ Синхронизировано с часами");}}catch(e){}};
 
 /* ---------- helpers ---------- */
 const $=s=>document.querySelector(s);

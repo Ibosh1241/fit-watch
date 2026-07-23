@@ -29,6 +29,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.*
+import com.google.android.gms.wearable.DataClient
+import com.google.android.gms.wearable.DataEvent
+import com.google.android.gms.wearable.DataEventBuffer
+import com.google.android.gms.wearable.DataMapItem
+import com.google.android.gms.wearable.PutDataMapRequest
+import com.google.android.gms.wearable.Wearable
 import kotlinx.coroutines.delay
 
 /* ============================ ПРОГРАММА (та же, что в приложении) ============================ */
@@ -85,13 +91,67 @@ fun buzz(ctx: Context, ms: Long) {
     else @Suppress("DEPRECATION") v.vibrate(ms)
 }
 
+/* ============================ Синхронизация (Wear Data Layer) ============================ */
+const val WEAR_PATH = "/progress"
+object SyncBus { var onProgress: ((Int) -> Unit)? = null }
+fun pushProgress(ctx: Context, sessionsDone: Int) {
+    try {
+        val req = PutDataMapRequest.create(WEAR_PATH).apply {
+            dataMap.putInt("sessionsDone", sessionsDone)
+            dataMap.putLong("ts", System.currentTimeMillis())
+        }.asPutDataRequest().setUrgent()
+        Wearable.getDataClient(ctx).putDataItem(req)
+    } catch (e: Exception) {}
+}
+
 /* ============================ Activity ============================ */
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), DataClient.OnDataChangedListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme(colors = Colors(primary = Color(0xFFFF6B35), onPrimary = Color(0xFF10151B))) {
                 App(this)
+            }
+        }
+        syncNow()
+    }
+
+    private fun applyIncoming(sd: Int) {
+        val cur = Prefs.getDone(this)
+        if (sd > cur) {
+            Prefs.setDone(this, sd)
+            SyncBus.onProgress?.invoke(sd)
+        }
+    }
+
+    private fun syncNow() {
+        try {
+            Wearable.getDataClient(this).dataItems.addOnSuccessListener { buf ->
+                for (item in buf) {
+                    if (item.uri.path == WEAR_PATH) {
+                        applyIncoming(DataMapItem.fromDataItem(item).dataMap.getInt("sessionsDone", 0))
+                    }
+                }
+                buf.release()
+            }
+        } catch (e: Exception) {}
+    }
+
+    override fun onResume() {
+        super.onResume()
+        try { Wearable.getDataClient(this).addListener(this) } catch (e: Exception) {}
+        syncNow()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        try { Wearable.getDataClient(this).removeListener(this) } catch (e: Exception) {}
+    }
+
+    override fun onDataChanged(events: DataEventBuffer) {
+        for (e in events) {
+            if (e.type == DataEvent.TYPE_CHANGED && e.dataItem.uri.path == WEAR_PATH) {
+                applyIncoming(DataMapItem.fromDataItem(e.dataItem).dataMap.getInt("sessionsDone", 0))
             }
         }
     }
@@ -140,6 +200,12 @@ fun App(ctx: Context) {
         onDispose { if (sm != null && listener != null) sm.unregisterListener(listener) }
     }
     val hrText = if (hasHrPerm) "❤️ " + (if (hr > 0) "$hr" else "—") else ""
+
+    // синхронизация прогресса с телефоном (Bluetooth Data Layer)
+    DisposableEffect(Unit) {
+        SyncBus.onProgress = { incoming -> if (incoming > done) done = incoming }
+        onDispose { SyncBus.onProgress = null }
+    }
 
     val week = weekOf(done)
     val w = whichDay(done)
@@ -214,7 +280,7 @@ fun App(ctx: Context) {
                 }
                 val goNext: () -> Unit = {
                     if (exIdx < exercises.size - 1) exIdx++
-                    else { done += 1; Prefs.setDone(ctx, done); buzz(ctx, 600); screen = "done"; exIdx = 0 }
+                    else { done += 1; Prefs.setDone(ctx, done); pushProgress(ctx, done); buzz(ctx, 600); screen = "done"; exIdx = 0 }
                 }
                 colCenter {
                     Text("Тр. $w · нед $week" + if (hrText.isNotEmpty()) "   $hrText" else "", fontSize = 11.sp, color = MUTED)
@@ -244,7 +310,7 @@ fun App(ctx: Context) {
                         Chip(onClick = goNext, colors = ChipDefaults.secondaryChipColors(),
                             label = { Text("Следующее ⏭") }, modifier = Modifier.fillMaxWidth())
                         Spacer(Modifier.height(6.dp))
-                        Chip(onClick = { done += 1; Prefs.setDone(ctx, done); buzz(ctx, 600); screen = "done"; exIdx = 0 },
+                        Chip(onClick = { done += 1; Prefs.setDone(ctx, done); pushProgress(ctx, done); buzz(ctx, 600); screen = "done"; exIdx = 0 },
                             colors = ChipDefaults.secondaryChipColors(),
                             label = { Text("Финиш") }, modifier = Modifier.fillMaxWidth())
                     }

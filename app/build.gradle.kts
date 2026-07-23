@@ -8,11 +8,11 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.fitcoach.watch"
+        applicationId = "com.fitcoach.trainer"
         minSdk = 30
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
     }
 
     buildTypes {
@@ -43,4 +43,5 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.wear.compose:compose-material:1.3.1")
     implementation("androidx.wear.compose:compose-foundation:1.3.1")
+    implementation("com.google.android.gms:play-services-wearable:18.1.0")
 }

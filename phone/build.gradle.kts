@@ -8,11 +8,11 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.fitcoach.phone"
+        applicationId = "com.fitcoach.trainer"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
     }
 
     buildTypes {
@@ -30,4 +30,5 @@ android {
 }
 
 dependencies {
+    implementation("com.google.android.gms:play-services-wearable:18.1.0")
 }
