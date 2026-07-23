@@ -14,3 +14,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "FitWatch"
 include(":app")
+include(":phone")

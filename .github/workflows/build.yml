@@ -1,9 +1,12 @@
-name: Build Wear OS APK
+name: Build APKs
 
 on:
   push:
     branches: [ "**" ]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -25,12 +28,28 @@ jobs:
         with:
           gradle-version: "8.7"
 
-      - name: Build debug APK
-        run: gradle assembleDebug --no-daemon --stacktrace
+      - name: Build APKs (watch + phone)
+        run: gradle :app:assembleDebug :phone:assembleDebug --no-daemon --stacktrace
 
-      - name: Upload APK
+      - name: Rename APKs
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk fit-trainer-watch.apk
+          cp phone/build/outputs/apk/debug/phone-debug.apk fit-trainer-phone.apk
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: fit-watch-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: fit-trainer-apks
+          path: |
+            fit-trainer-watch.apk
+            fit-trainer-phone.apk
           if-no-files-found: error
+
+      - name: Publish to Releases (direct download links)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Последняя сборка"
+          files: |
+            fit-trainer-watch.apk
+            fit-trainer-phone.apk
