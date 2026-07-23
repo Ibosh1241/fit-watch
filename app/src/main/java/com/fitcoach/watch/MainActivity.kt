@@ -1,13 +1,22 @@
 package com.fitcoach.watch
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.Build
 import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -108,6 +117,34 @@ fun App(ctx: Context) {
     var warmIdx by remember { mutableStateOf(0) }
     var exIdx by remember { mutableStateOf(0) }
 
+    // --- пульс (SensorManager, без доп. библиотек) ---
+    var hr by remember { mutableStateOf(0) }
+    var hasHrPerm by remember {
+        mutableStateOf(ContextCompat.checkSelfPermission(ctx, Manifest.permission.BODY_SENSORS) == PackageManager.PERMISSION_GRANTED)
+    }
+    val hrLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> hasHrPerm = granted }
+    LaunchedEffect(Unit) { if (!hasHrPerm) hrLauncher.launch(Manifest.permission.BODY_SENSORS) }
+    val measuring = screen == "warm" || screen == "work"
+    DisposableEffect(measuring, hasHrPerm) {
+        var sm: SensorManager? = null
+        var listener: SensorEventListener? = null
+        if (measuring && hasHrPerm) {
+            sm = ctx.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+            val sensor = sm.getDefaultSensor(Sensor.TYPE_HEART_RATE)
+            if (sensor != null) {
+                listener = object : SensorEventListener {
+                    override fun onSensorChanged(e: SensorEvent) {
+                        if (e.values.isNotEmpty()) { val v = e.values[0].toInt(); if (v > 0) hr = v }
+                    }
+                    override fun onAccuracyChanged(s: Sensor?, a: Int) {}
+                }
+                sm.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
+            }
+        }
+        onDispose { val s = sm; val l = listener; if (s != null && l != null) s.unregisterListener(l) }
+    }
+    val hrText = if (hasHrPerm) "❤️ " + (if (hr > 0) "$hr" else "—") else ""
+
     val week = weekOf(done)
     val w = whichDay(done)
     val phase = prog(week)
@@ -153,6 +190,7 @@ fun App(ctx: Context) {
                 }
                 colCenter {
                     Text("🔥 Разминка ${warmIdx + 1}/${WARM.size}", fontSize = 12.sp, color = MUTED)
+                    if (hrText.isNotEmpty()) Text(hrText, fontSize = 12.sp, color = FLAME)
                     Spacer(Modifier.height(4.dp))
                     Text(wm.first, fontSize = 16.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(6.dp))
@@ -183,7 +221,7 @@ fun App(ctx: Context) {
                     else { done += 1; Prefs.setDone(ctx, done); buzz(ctx, 600); screen = "done"; exIdx = 0 }
                 }
                 colCenter {
-                    Text("Тр. $w · нед $week", fontSize = 11.sp, color = MUTED)
+                    Text("Тр. $w · нед $week" + if (hrText.isNotEmpty()) "   $hrText" else "", fontSize = 11.sp, color = MUTED)
                     Text("${exIdx + 1}/${exercises.size}: ${ex.name}", fontSize = 15.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                     Text("$setDone/${ex.sets} подх · ${ex.target}", fontSize = 12.sp, color = MUTED, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(8.dp))
